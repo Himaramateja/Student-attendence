@@ -85,6 +85,27 @@ public class StudentDAO {
         return students;
     }
 
+    public List<Student> getStudentsBySection(int section) throws SQLException {
+        List<Student> students = new ArrayList<>();
+        String query = "SELECT * FROM students WHERE section = ? ORDER BY student_roll";
+        try (Connection conn = DbConnection.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setInt(1, section);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                students.add(new Student(
+                        rs.getInt("id"),
+                        rs.getInt("user_id"),
+                        rs.getString("student_roll"),
+                        rs.getString("name"),
+                        rs.getString("department"),
+                        rs.getInt("section"),
+                        rs.getInt("semester")));
+            }
+        }
+        return students;
+    }
+
     public List<Integer> getDistinctSections() throws SQLException {
         List<Integer> sections = new ArrayList<>();
         String query = "SELECT DISTINCT section FROM students ORDER BY section";
@@ -107,6 +128,51 @@ public class StudentDAO {
                 semesters.add(rs.getInt(1));
         }
         return semesters;
+    }
+
+    public List<String> getDistinctDepartments() throws SQLException {
+        List<String> departments = new ArrayList<>();
+        String query = "SELECT DISTINCT department FROM students ORDER BY department";
+        try (Connection conn = DbConnection.getConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery(query)) {
+            while (rs.next())
+                departments.add(rs.getString(1));
+        }
+        return departments;
+    }
+
+    public List<Student> searchStudents(Integer section, String department, Integer semester, String roll) throws SQLException {
+        List<Student> students = new ArrayList<>();
+        StringBuilder query = new StringBuilder("SELECT * FROM students WHERE 1=1");
+        List<Object> params = new ArrayList<>();
+
+        if (section != null) { query.append(" AND section = ?"); params.add(section); }
+        if (department != null && !department.isEmpty()) { query.append(" AND department = ?"); params.add(department); }
+        if (semester != null) { query.append(" AND semester = ?"); params.add(semester); }
+        if (roll != null && !roll.isEmpty()) { query.append(" AND student_roll = ?"); params.add(roll); }
+        query.append(" ORDER BY student_roll");
+
+        try (Connection conn = DbConnection.getConnection();
+                PreparedStatement pstmt = conn.prepareStatement(query.toString())) {
+            for (int i = 0; i < params.size(); i++) {
+                Object p = params.get(i);
+                if (p instanceof Integer) pstmt.setInt(i + 1, (Integer) p);
+                else pstmt.setString(i + 1, (String) p);
+            }
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                students.add(new Student(
+                        rs.getInt("id"),
+                        rs.getInt("user_id"),
+                        rs.getString("student_roll"),
+                        rs.getString("name"),
+                        rs.getString("department"),
+                        rs.getInt("section"),
+                        rs.getInt("semester")));
+            }
+        }
+        return students;
     }
 
     public void updateStudent(Student student) throws SQLException {

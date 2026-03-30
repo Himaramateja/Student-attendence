@@ -1,14 +1,89 @@
 package com.attendance.service;
 
-import com.attendance.dao.SubjectDAO;
-import com.attendance.model.Subject;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.attendance.dao.SubjectDAO;
+import com.attendance.dao.TimetableDAO;
+import com.attendance.model.Subject;
 
 public class TimetableService {
     private SubjectDAO subjectDAO = new SubjectDAO();
+    private TimetableDAO timetableDAO = new TimetableDAO();
 
+    /**
+     * Get timetable for a class. First checks DB for admin-saved timetable.
+     * Falls back to algorithmic generation if none exists.
+     */
+    public Map<String, List<String>> generateTimetable(String department, int section, int semester) throws SQLException {
+        // Check if admin has saved a timetable for this class
+        if (timetableDAO.hasTimetable(department, section, semester)) {
+            return getDbTimetableWithNames(department, section, semester);
+        }
+        // Fallback to algorithmic generation
+        return generateAlgorithmicTimetable(section, semester);
+    }
+
+    /**
+     * Legacy method for backward compatibility.
+     */
     public Map<String, List<String>> generateTimetable(int section, int semester) throws SQLException {
+        return generateAlgorithmicTimetable(section, semester);
+    }
+
+    /**
+     * Read timetable from DB and resolve subject codes to "SubjectName (P#)" format.
+     */
+    private Map<String, List<String>> getDbTimetableWithNames(String department, int section, int semester) throws SQLException {
+        Map<String, List<String>> rawTimetable = timetableDAO.getTimetable(department, section, semester);
+        Map<String, List<String>> displayTimetable = new LinkedHashMap<>();
+
+        for (Map.Entry<String, List<String>> entry : rawTimetable.entrySet()) {
+            String day = entry.getKey();
+            List<String> subjectCodes = entry.getValue();
+            List<String> displayPeriods = new ArrayList<>();
+            for (int i = 0; i < subjectCodes.size(); i++) {
+                String code = subjectCodes.get(i);
+                if (code != null) {
+                    Subject subject = subjectDAO.getSubjectByCode(code);
+                    String name = (subject != null) ? subject.getSubjectName() : code;
+                    displayPeriods.add(name + " (P" + (i + 1) + ")");
+                } else {
+                    displayPeriods.add("Free Period (P" + (i + 1) + ")");
+                }
+            }
+            displayTimetable.put(day, displayPeriods);
+        }
+        return displayTimetable;
+    }
+
+    /**
+     * Get the raw timetable from DB (subject codes, not names) for admin editing.
+     */
+    public Map<String, List<String>> getRawTimetable(String department, int section, int semester) throws SQLException {
+        if (timetableDAO.hasTimetable(department, section, semester)) {
+            return timetableDAO.getTimetable(department, section, semester);
+        }
+        return null;
+    }
+
+    /**
+     * Save a complete timetable to DB.
+     */
+    public void saveTimetable(String department, int section, int semester,
+            Map<String, List<String>> timetable) throws SQLException {
+        timetableDAO.saveTimetable(department, section, semester, timetable);
+    }
+
+    /**
+     * Original algorithmic timetable generation.
+     */
+    private Map<String, List<String>> generateAlgorithmicTimetable(int section, int semester) throws SQLException {
         List<Subject> allSubjects = subjectDAO.getAllSubjects();
         if (allSubjects.isEmpty()) {
             return Collections.emptyMap();
@@ -22,16 +97,9 @@ public class TimetableService {
         for (int dayIndex = 0; dayIndex < dayNames.length; dayIndex++) {
             List<String> dailyPeriods = new ArrayList<>();
             for (int slotIndex = 0; slotIndex < 7; slotIndex++) {
-                // 1. Calculate a unique Period ID for this time slot (1-7)
-                // The offset moves by day, section, and semester to ensure no collisions
                 int periodID = (slotIndex + dayIndex * 2 + section * 3 + semester * 5) % 7 + 1;
-
-                // 2. Map this Period ID to a Subject
-                // We use another class-specific offset so subjects are also unique per slot
                 int subjectIndex = (periodID + section * 11 + semester * 17) % subjectCount;
                 String subjectName = allSubjects.get(subjectIndex).getSubjectName();
-
-                // Format as: "Subject Name (P1)"
                 dailyPeriods.add(subjectName + " (P" + periodID + ")");
             }
             timetable.put(dayNames[dayIndex], dailyPeriods);

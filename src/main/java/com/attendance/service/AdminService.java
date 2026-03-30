@@ -13,6 +13,7 @@ public class AdminService {
     private SubjectDAO subjectDAO = new SubjectDAO();
     private ReportDAO reportDAO = new ReportDAO();
     private AttendanceDAO attendanceDAO = new AttendanceDAO();
+    private TimetableService timetableService = new TimetableService();
 
     public void addAdmin(String username, String password) throws SQLException {
         userDAO.addUser(username, password, "ADMIN");
@@ -101,5 +102,53 @@ public class AdminService {
 
     public void removeSubjectAssignment(int facultyDbId, int subjectId) throws SQLException {
         subjectDAO.removeSubjectAssignment(facultyDbId, subjectId);
+    }
+
+    public List<Student> getStudentsBySection(int section) throws SQLException {
+        return studentDAO.getStudentsBySection(section);
+    }
+
+    public Student getStudentByRoll(String roll) throws SQLException {
+        return studentDAO.getStudentByRoll(roll);
+    }
+
+    public List<FacultyDetailDTO> getFacultyWithAssignments() throws SQLException {
+        return facultyDAO.getFacultyWithAssignments();
+    }
+
+    public List<FacultyDetailDTO> getFacultyDetailByCode(String facultyId) throws SQLException {
+        return facultyDAO.getFacultyDetailByCode(facultyId);
+    }
+
+    public List<Student> searchStudents(Integer section, String department, Integer semester, String roll) throws SQLException {
+        return studentDAO.searchStudents(section, department, semester, roll);
+    }
+
+    public List<String> getDistinctDepartments() throws SQLException {
+        return studentDAO.getDistinctDepartments();
+    }
+
+    public List<Integer> getDistinctSections() throws SQLException {
+        return studentDAO.getDistinctSections();
+    }
+
+    public List<Integer> getDistinctSemesters() throws SQLException {
+        return studentDAO.getDistinctSemesters();
+    }
+
+    public List<String> getDistinctFacultyDepartments() throws SQLException {
+        return facultyDAO.getDistinctFacultyDepartments();
+    }
+
+    public List<FacultyDetailDTO> searchFaculty(String department, String facultyId) throws SQLException {
+        return facultyDAO.searchFaculty(department, facultyId);
+    }
+
+    public java.util.Map<String, List<String>> getRawTimetable(String department, int section, int semester) throws SQLException {
+        return timetableService.getRawTimetable(department, section, semester);
+    }
+
+    public void saveTimetable(String department, int section, int semester, java.util.Map<String, List<String>> timetable) throws SQLException {
+        timetableService.saveTimetable(department, section, semester, timetable);
     }
 }

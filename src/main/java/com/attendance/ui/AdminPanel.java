@@ -8,6 +8,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
 import java.sql.Date;
 import java.util.List;
+import java.util.ArrayList;
 
 public class AdminPanel extends JPanel {
     private final SwingUI parent;
@@ -52,7 +53,8 @@ public class AdminPanel extends JPanel {
         sidebar.setBorder(BorderFactory.createEmptyBorder(15, 10, 15, 10));
         sidebar.setPreferredSize(new Dimension(200, 0));
 
-        String[] menuItems = { "Dashboard", "Manage Students", "Manage Faculty", "Manage Subjects", "Reports" };
+        String[] menuItems = { "Dashboard", "Manage Students", "Manage Faculty", "Manage Subjects", "Reports",
+                "View Students", "View Faculty", "Manage Timetable" };
         for (String item : menuItems) {
             JButton btn = new JButton(item);
             btn.setFont(new Font("Segoe UI", Font.PLAIN, 14));
@@ -76,6 +78,9 @@ public class AdminPanel extends JPanel {
         contentPanel.add(createFacultyPanel(), "Manage Faculty");
         contentPanel.add(createSubjectPanel(), "Manage Subjects");
         contentPanel.add(createReportPanel(), "Reports");
+        contentPanel.add(createViewStudentsPanel(), "View Students");
+        contentPanel.add(createViewFacultyPanel(), "View Faculty");
+        contentPanel.add(createManageTimetablePanel(), "Manage Timetable");
         add(contentPanel, BorderLayout.CENTER);
         showContent("Dashboard");
     }
@@ -92,6 +97,12 @@ public class AdminPanel extends JPanel {
             contentPanel.add(createSubjectPanel(), "Manage Subjects");
         } else if (name.equals("Reports")) {
             contentPanel.add(createReportPanel(), "Reports");
+        } else if (name.equals("View Students")) {
+            contentPanel.add(createViewStudentsPanel(), "View Students");
+        } else if (name.equals("View Faculty")) {
+            contentPanel.add(createViewFacultyPanel(), "View Faculty");
+        } else if (name.equals("Manage Timetable")) {
+            contentPanel.add(createManageTimetablePanel(), "Manage Timetable");
         }
         ((CardLayout) contentPanel.getLayout()).show(contentPanel, name);
     }
@@ -678,6 +689,433 @@ public class AdminPanel extends JPanel {
         } catch (Exception ex) {
             ex.printStackTrace();
         }
+    }
+
+    // ===== VIEW STUDENTS =====
+    private JPanel createViewStudentsPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBackground(BG);
+        panel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+
+        // Filter Bar
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        filterPanel.setBackground(CARD_BG);
+        filterPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createTitledBorder(BorderFactory.createLineBorder(ACCENT),
+                        "Search Students", 0, 0, new Font("Segoe UI", Font.BOLD, 14), ACCENT),
+                BorderFactory.createEmptyBorder(8, 12, 8, 12)));
+
+        // Section dropdown
+        JComboBox<String> sectionCombo = new JComboBox<>();
+        sectionCombo.addItem("-- All Sections --");
+        try {
+            for (int sec : adminService.getDistinctSections()) {
+                sectionCombo.addItem("Section " + sec);
+            }
+        } catch (Exception ex) { ex.printStackTrace(); }
+
+        // Department dropdown
+        JComboBox<String> deptCombo = new JComboBox<>();
+        deptCombo.addItem("-- All Departments --");
+        try {
+            for (String dept : adminService.getDistinctDepartments()) {
+                deptCombo.addItem(dept);
+            }
+        } catch (Exception ex) { ex.printStackTrace(); }
+
+        // Semester dropdown
+        JComboBox<String> semCombo = new JComboBox<>();
+        semCombo.addItem("-- All Semesters --");
+        try {
+            for (int sem : adminService.getDistinctSemesters()) {
+                semCombo.addItem("Semester " + sem);
+            }
+        } catch (Exception ex) { ex.printStackTrace(); }
+
+        JTextField rollField = new JTextField(10);
+        JButton searchBtn = styledButton("Search", ACCENT);
+        JButton showAllBtn = styledButton("Show All", GREEN);
+
+        filterPanel.add(label("Section:"));
+        filterPanel.add(sectionCombo);
+        filterPanel.add(label("Department:"));
+        filterPanel.add(deptCombo);
+        filterPanel.add(label("Semester:"));
+        filterPanel.add(semCombo);
+        filterPanel.add(label("Roll No:"));
+        filterPanel.add(rollField);
+        filterPanel.add(searchBtn);
+        filterPanel.add(showAllBtn);
+
+        panel.add(filterPanel, BorderLayout.NORTH);
+
+        // Results Table
+        String[] cols = { "Roll No", "Name", "Department", "Section", "Semester" };
+        DefaultTableModel model = new DefaultTableModel(cols, 0) {
+            public boolean isCellEditable(int r, int c) { return false; }
+        };
+        JTable table = new JTable(model);
+        styleTable(table);
+        loadStudents(model); // Show all by default
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+
+        // Search action
+        searchBtn.addActionListener(e -> {
+            Integer section = null;
+            String department = null;
+            Integer semester = null;
+            String roll = rollField.getText().trim();
+
+            if (sectionCombo.getSelectedIndex() > 0) {
+                String secText = (String) sectionCombo.getSelectedItem();
+                section = Integer.parseInt(secText.replace("Section ", ""));
+            }
+            if (deptCombo.getSelectedIndex() > 0) {
+                department = (String) deptCombo.getSelectedItem();
+            }
+            if (semCombo.getSelectedIndex() > 0) {
+                String semText = (String) semCombo.getSelectedItem();
+                semester = Integer.parseInt(semText.replace("Semester ", ""));
+            }
+            if (roll.isEmpty()) roll = null;
+
+            model.setRowCount(0);
+            try {
+                List<Student> results = adminService.searchStudents(section, department, semester, roll);
+                for (Student s : results) {
+                    model.addRow(new Object[] { s.getStudentRoll(), s.getName(),
+                            s.getDepartment(), s.getSection(), s.getSemester() });
+                }
+                if (results.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "No students found matching the filters.",
+                            "Not Found", JOptionPane.INFORMATION_MESSAGE);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage(), "Error",
+                        JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        showAllBtn.addActionListener(e -> {
+            sectionCombo.setSelectedIndex(0);
+            deptCombo.setSelectedIndex(0);
+            semCombo.setSelectedIndex(0);
+            rollField.setText("");
+            loadStudents(model);
+        });
+
+        return panel;
+    }
+
+    // ===== VIEW FACULTY =====
+    private JPanel createViewFacultyPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBackground(BG);
+        panel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+
+        // Filter Bar
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        filterPanel.setBackground(CARD_BG);
+        filterPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createTitledBorder(BorderFactory.createLineBorder(ACCENT),
+                        "Search Faculty", 0, 0, new Font("Segoe UI", Font.BOLD, 14), ACCENT),
+                BorderFactory.createEmptyBorder(8, 12, 8, 12)));
+
+        // Department dropdown
+        JComboBox<String> deptCombo = new JComboBox<>();
+        deptCombo.addItem("-- All Departments --");
+        try {
+            for (String dept : adminService.getDistinctFacultyDepartments()) {
+                deptCombo.addItem(dept);
+            }
+        } catch (Exception ex) { ex.printStackTrace(); }
+
+        JTextField facIdField = new JTextField(12);
+        JButton searchBtn = styledButton("Search", ACCENT);
+        JButton showAllBtn = styledButton("Show All", GREEN);
+
+        filterPanel.add(label("Department:"));
+        filterPanel.add(deptCombo);
+        filterPanel.add(label("Faculty ID:"));
+        filterPanel.add(facIdField);
+        filterPanel.add(searchBtn);
+        filterPanel.add(showAllBtn);
+
+        panel.add(filterPanel, BorderLayout.NORTH);
+
+        // Results Table
+        String[] cols = { "Faculty ID", "Name", "Department", "Assigned Subject Code", "Assigned Subject Name" };
+        DefaultTableModel model = new DefaultTableModel(cols, 0) {
+            public boolean isCellEditable(int r, int c) { return false; }
+        };
+        JTable table = new JTable(model);
+        styleTable(table);
+        loadFacultyDetails(model, null, null); // Show all by default
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+
+        // Search action
+        searchBtn.addActionListener(e -> {
+            String department = null;
+            String facId = facIdField.getText().trim();
+
+            if (deptCombo.getSelectedIndex() > 0) {
+                department = (String) deptCombo.getSelectedItem();
+            }
+            if (facId.isEmpty()) facId = null;
+
+            model.setRowCount(0);
+            try {
+                List<FacultyDetailDTO> results = adminService.searchFaculty(department, facId);
+                for (FacultyDetailDTO d : results) {
+                    model.addRow(new Object[] {
+                            d.getFacultyId(), d.getFacultyName(), d.getDepartment(),
+                            d.getSubjectCode() != null ? d.getSubjectCode() : "(None)",
+                            d.getSubjectName() != null ? d.getSubjectName() : "(No subject assigned)" });
+                }
+                if (results.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "No faculty found matching the filters.",
+                            "Not Found", JOptionPane.INFORMATION_MESSAGE);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage(), "Error",
+                        JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        showAllBtn.addActionListener(e -> {
+            deptCombo.setSelectedIndex(0);
+            facIdField.setText("");
+            loadFacultyDetails(model, null, null);
+        });
+
+        return panel;
+    }
+
+    private void loadFacultyDetails(DefaultTableModel model, String department, String facultyId) {
+        model.setRowCount(0);
+        try {
+            List<FacultyDetailDTO> details = adminService.searchFaculty(department, facultyId);
+            for (FacultyDetailDTO d : details) {
+                model.addRow(new Object[] {
+                        d.getFacultyId(), d.getFacultyName(), d.getDepartment(),
+                        d.getSubjectCode() != null ? d.getSubjectCode() : "(None)",
+                        d.getSubjectName() != null ? d.getSubjectName() : "(No subject assigned)" });
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    // ===== MANAGE TIMETABLE =====
+    private JPanel createManageTimetablePanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBackground(BG);
+        panel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+
+        // Selector Bar
+        JPanel selectorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 10));
+        selectorPanel.setBackground(CARD_BG);
+        selectorPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createTitledBorder(BorderFactory.createLineBorder(ACCENT),
+                        "Select Class to Manage", 0, 0, new Font("Segoe UI", Font.BOLD, 14), ACCENT),
+                BorderFactory.createEmptyBorder(8, 12, 8, 12)));
+
+        JComboBox<String> deptCombo = new JComboBox<>();
+        try {
+            for (String dept : adminService.getDistinctDepartments()) {
+                deptCombo.addItem(dept);
+            }
+        } catch (Exception ex) { ex.printStackTrace(); }
+
+        JComboBox<Integer> secCombo = new JComboBox<>();
+        try {
+            for (int sec : adminService.getDistinctSections()) {
+                secCombo.addItem(sec);
+            }
+        } catch (Exception ex) { ex.printStackTrace(); }
+
+        JComboBox<Integer> semCombo = new JComboBox<>();
+        try {
+            for (int sem : adminService.getDistinctSemesters()) {
+                semCombo.addItem(sem);
+            }
+        } catch (Exception ex) { ex.printStackTrace(); }
+
+        JButton loadBtn = styledButton("Load Timetable", ACCENT);
+
+        selectorPanel.add(label("Department:"));
+        selectorPanel.add(deptCombo);
+        selectorPanel.add(label("Section:"));
+        selectorPanel.add(secCombo);
+        selectorPanel.add(label("Semester:"));
+        selectorPanel.add(semCombo);
+        selectorPanel.add(loadBtn);
+
+        panel.add(selectorPanel, BorderLayout.NORTH);
+
+        // Editor Grid
+        String[] cols = { "Timing", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday" };
+        DefaultTableModel model = new DefaultTableModel(cols, 0) {
+            public boolean isCellEditable(int r, int c) {
+                // Timing column is not editable, lunch row is not editable
+                return c > 0 && r != 4;
+            }
+        };
+        JTable table = new JTable(model);
+        styleTable(table);
+        table.setRowHeight(40);
+
+        // Populate empty structure
+        List<String> timings = new com.attendance.service.TimetableService().getTimings();
+        for (int i = 0; i < 4; i++) model.addRow(new Object[]{timings.get(i), "", "", "", "", ""});
+        model.addRow(new Object[]{timings.get(4), "LUNCH BREAK", "LUNCH BREAK", "LUNCH BREAK", "LUNCH BREAK", "LUNCH BREAK"});
+        for (int i = 5; i < 8; i++) model.addRow(new Object[]{timings.get(i), "", "", "", "", ""});
+
+        // Subject dropdown for cells
+        JComboBox<String> editorCombo = new JComboBox<>();
+        editorCombo.addItem(""); // Empty option for free period
+        try {
+            for (Subject s : adminService.getAllSubjects()) {
+                editorCombo.addItem(s.getSubjectName() + " (" + s.getSubjectCode() + ")");
+            }
+        } catch (Exception ex) { ex.printStackTrace(); }
+        DefaultCellEditor cellEditor = new DefaultCellEditor(editorCombo);
+        for (int i = 1; i <= 5; i++) {
+            table.getColumnModel().getColumn(i).setCellEditor(cellEditor);
+        }
+
+        // Center all cells visually
+        javax.swing.table.DefaultTableCellRenderer center = new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable t, Object val, boolean sel, boolean foc, int r, int c) {
+                super.getTableCellRendererComponent(t, val, sel, foc, r, c);
+                setHorizontalAlignment(SwingConstants.CENTER);
+                if (r == 4) {
+                    setBackground(YELLOW);
+                    setForeground(BG);
+                    setFont(new Font("Segoe UI", Font.BOLD, 13));
+                } else if (c == 0) {
+                    setBackground(new Color(36, 36, 54));
+                    setForeground(ACCENT);
+                    setFont(new Font("Segoe UI", Font.BOLD, 12));
+                } else {
+                    if (sel) {
+                        setBackground(ACCENT);
+                        setForeground(BG);
+                    } else {
+                        setBackground(CARD_BG);
+                        setForeground(TEXT);
+                    }
+                    setFont(new Font("Segoe UI", Font.PLAIN, 12));
+                }
+                return this;
+            }
+        };
+        for (int i = 0; i < table.getColumnCount(); i++) {
+            table.getColumnModel().getColumn(i).setCellRenderer(center);
+        }
+
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.add(new JScrollPane(table), BorderLayout.CENTER);
+        
+        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        bottomPanel.setBackground(BG);
+        JButton saveBtn = styledButton("Save Timetable", GREEN);
+        saveBtn.setEnabled(false); // Enable only after loading
+        bottomPanel.add(saveBtn);
+        centerPanel.add(bottomPanel, BorderLayout.SOUTH);
+
+        panel.add(centerPanel, BorderLayout.CENTER);
+
+        // Actions
+        loadBtn.addActionListener(e -> {
+            if (deptCombo.getSelectedItem() == null || secCombo.getSelectedItem() == null || semCombo.getSelectedItem() == null) {
+                return;
+            }
+            String dept = (String) deptCombo.getSelectedItem();
+            int sec = (Integer) secCombo.getSelectedItem();
+            int sem = (Integer) semCombo.getSelectedItem();
+
+            try {
+                // Clear existing inputs
+                for (int r = 0; r < model.getRowCount(); r++) {
+                    if (r == 4) continue;
+                    for (int c = 1; c <= 5; c++) model.setValueAt("", r, c);
+                }
+
+                java.util.Map<String, List<String>> rawTable = adminService.getRawTimetable(dept, sec, sem);
+                if (rawTable != null) {
+                    // Create map to format codes as "Name (Code)" locally
+                    java.util.Map<String, String> codeToDisplay = new java.util.HashMap<>();
+                    try {
+                        for (Subject s : adminService.getAllSubjects()) {
+                            codeToDisplay.put(s.getSubjectCode(), s.getSubjectName() + " (" + s.getSubjectCode() + ")");
+                        }
+                    } catch (Exception ex) {}
+
+                    String[] days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"};
+                    for (int c = 0; c < 5; c++) {
+                        List<String> periodCodes = rawTable.get(days[c]);
+                        if (periodCodes != null) {
+                            for (int p = 0; p < periodCodes.size(); p++) {
+                                int modelRow = (p >= 4) ? p + 1 : p;
+                                String code = periodCodes.get(p);
+                                String display = code != null ? codeToDisplay.getOrDefault(code, code) : "";
+                                model.setValueAt(display, modelRow, c + 1);
+                            }
+                        }
+                    }
+                    JOptionPane.showMessageDialog(this, "Loaded existing timetable for " + dept + " Sec " + sec + " Sem " + sem);
+                } else {
+                    JOptionPane.showMessageDialog(this, "No saved timetable found. You can create a new one.");
+                }
+                saveBtn.setEnabled(true);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Error loading timetable: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        saveBtn.addActionListener(e -> {
+            // End edit before save
+            if (table.isEditing()) {
+                table.getCellEditor().stopCellEditing();
+            }
+
+            String dept = (String) deptCombo.getSelectedItem();
+            int sec = (Integer) secCombo.getSelectedItem();
+            int sem = (Integer) semCombo.getSelectedItem();
+
+            try {
+                java.util.Map<String, List<String>> newTimetable = new java.util.LinkedHashMap<>();
+                String[] days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"};
+                
+                for (int c = 0; c < 5; c++) {
+                    List<String> periods = new ArrayList<>();
+                    for (int r = 0; r < 8; r++) {
+                        if (r == 4) continue; // Skip lunch
+                        String val = (String) model.getValueAt(r, c + 1);
+                        String code = null;
+                        if (val != null && !val.trim().isEmpty()) {
+                            val = val.trim();
+                            if (val.contains("(") && val.endsWith(")")) {
+                                code = val.substring(val.lastIndexOf("(") + 1, val.length() - 1);
+                            } else {
+                                code = val;
+                            }
+                        }
+                        periods.add(code);
+                    }
+                    newTimetable.put(days[c], periods);
+                }
+
+                adminService.saveTimetable(dept, sec, sem, newTimetable);
+                JOptionPane.showMessageDialog(this, "Timetable saved successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Error saving timetable: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        return panel;
     }
 
     // ===== UTILITY =====

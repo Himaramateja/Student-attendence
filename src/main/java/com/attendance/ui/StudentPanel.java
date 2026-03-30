@@ -273,8 +273,8 @@ public class StudentPanel extends JPanel {
                 return panel;
             }
 
-            Map<String, List<String>> timetable = timetableService.generateTimetable(student.getSection(),
-                    student.getSemester());
+            Map<String, List<String>> timetable = timetableService.generateTimetable(
+                    student.getDepartment(), student.getSection(), student.getSemester());
             List<String> timings = timetableService.getTimings();
             String[] days = timetable.keySet().toArray(new String[0]);
 
